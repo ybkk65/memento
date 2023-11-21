@@ -1,6 +1,5 @@
 <?php
-session_start();
-session_destroy();
+session_unset();
 session_start();
 
 require 'connexion.php';
@@ -11,59 +10,64 @@ function validationEmail($email)
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    if (isset($_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
+    if (isset($_POST['csrf_token']) && hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
 
-    $first_Name = $_POST['first-name'];
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-    $name = $_POST['name'];
-    $password_confirmation = $_POST['password_confirmation'];
-    $image = '';
+        $first_Name = htmlspecialchars($_POST['first-name']);
+        $email = htmlspecialchars($_POST['email']);
+        $password = $_POST['password'];
+        $name = htmlspecialchars($_POST['name']);
+        $password_confirmation = $_POST['password_confirmation'];
+        $image = '';
 
-    if (!empty($email) && !empty($password) && !empty($name) && !empty($password_confirmation)) {
-        if (validationEmail($email) && strlen($password) >= 8) {
-            if ($password !== $password_confirmation) {
-                echo 'Les mots de passe ne correspondent pas.';
-            } else {
-                if (isset($_FILES['image']) && $_FILES['image']['error'] === 0) {
-                    if ($_FILES['image']['size'] <= 200000 && $_FILES['image']['type'] === 'image/png') {
-                        $image = $_FILES['image']['name'];
-                        move_uploaded_file($_FILES['image']['tmp_name'], '/Applications/MAMP/htdocs/memento/' . basename($_FILES['image']['name']));
-                    } else {
-                        echo 'Erreur lors du téléchargement (l\'image doit être au format PNG et inférieure à 200ko).';
+        if (!empty($email) && !empty($password) && !empty($name) && !empty($password_confirmation)) {
+            if (validationEmail($email) && strlen($password) >= 8) {
+                if ($password !== $password_confirmation) {
+                    echo 'Les mots de passe ne correspondent pas.';
+                } else {
+                    if (isset($_FILES['image']) && $_FILES['image']['error'] === 0) {
+                        if ($_FILES['image']['size'] <= 200000 && $_FILES['image']['type'] === 'image/png') {
+                            $image = $_FILES['image']['name'];
+                            $upload_path = '/Applications/MAMP/htdocs/memento/' . basename($_FILES['image']['name']);
+                            if (move_uploaded_file($_FILES['image']['tmp_name'], $upload_path)) {
+                                // Votre traitement après le téléchargement réussi de l'image
+                            } else {
+                                echo 'Erreur lors du téléchargement de l\'image.';
+                            }
+                        } else {
+                            echo 'Erreur lors du téléchargement (l\'image doit être au format PNG et inférieure à 200ko).';
+                        }
+                    }
+
+                    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+                    try {
+                        $stmt = $bdd->prepare("INSERT INTO admin (first_name, name, email, password, image) VALUES (:first_name, :name, :email, :password, :image)");
+                        $stmt->bindParam(':first_name', $first_Name);
+                        $stmt->bindParam(':name', $name);
+                        $stmt->bindParam(':email', $email);
+                        $stmt->bindParam(':password', $hashedPassword);
+                        $stmt->bindParam(':image', $image);
+                        $stmt->execute();
+
+                        echo "Données enregistrées avec succès.";
+
+                        $_SESSION['first_name'] = $first_Name;
+                        $_SESSION['email'] = $email;
+                        
+                        header("Location: loged.php");
+                        exit();
+                    } catch (PDOException $e) {
+                        echo "Erreur lors de l'enregistrement des données.";
+                        // Vous pouvez journaliser l'erreur sans la rendre publique
                     }
                 }
-                
-                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
-                try {
-                    $stmt = $bdd->prepare("INSERT INTO admin (first_name, name, email, password, image) VALUES (:first_name, :name, :email, :password, :image)");
-                    $stmt->bindParam(':first_name', $first_Name);
-                    $stmt->bindParam(':name', $name);
-                    $stmt->bindParam(':email', $email);
-                    $stmt->bindParam(':password', $hashedPassword);
-                    $stmt->bindParam(':image', $image);
-                    $stmt->execute();
-
-                    echo "Données enregistrées avec succès.";
-                    
-                    $_SESSION['first_name']=$first_Name;
-                    $_SESSION['email']=$email;
-                    header("Location: loged.php");
-                    exit();
-                } catch (PDOException $e) {
-                    echo "Erreur : " . $e->getMessage();
-                }
+            } else {
+                echo 'Email invalide ou mot de passe trop court (minimum 8 caractères).';
             }
         } else {
-            echo 'Email invalide ou mot de passe trop court (minimum 8 caractères).';
+            echo 'Veuillez remplir tous les champs du formulaire.';
         }
     } else {
-        echo 'Veuillez remplir tous les champs du formulaire.';
-    }
-}
-
-    else{
         echo "Erreur CSRF : Tentative de manipulation du formulaire détectée.";
     }
 }

@@ -1,9 +1,7 @@
 <?php
 session_start();
 require 'connexion.php'; 
-if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION       ['csrf_token']) {
-    die('Token CSRF invalide');
-}
+
 if ($_SESSION['islog'] == true) {
     try {
         $email = $_SESSION['email']; 
